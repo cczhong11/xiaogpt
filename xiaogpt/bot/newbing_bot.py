@@ -4,13 +4,15 @@ import re
 
 from EdgeGPT import Chatbot, ConversationStyle
 
-from xiaogpt.bot.base_bot import BaseBot
+from xiaogpt.bot.base_bot import BaseBot, ChatHistoryMixin
 from xiaogpt.utils import split_sentences
 
 _reference_link_re = re.compile(r"\[\d+\]: .+?\n+")
 
 
-class NewBingBot(BaseBot):
+class NewBingBot(ChatHistoryMixin, BaseBot):
+    name = "Bing"
+
     def __init__(
         self,
         bing_cookie_path: str = "",
@@ -40,13 +42,20 @@ class NewBingBot(BaseBot):
     async def ask(self, query, **options):
         kwargs = {"conversation_style": ConversationStyle.balanced, **options}
         completion = await self._bot.ask(prompt=query, **kwargs)
-        text = self.clean_text(completion["item"]["messages"][1]["text"])
+        try:
+            text = self.clean_text(completion["item"]["messages"][1]["text"])
+        except Exception as e:
+            print(str(e))
+            return
         print(text)
         return text
 
     async def ask_stream(self, query, **options):
         kwargs = {"conversation_style": ConversationStyle.balanced, **options}
-        completion = self._bot.ask_stream(prompt=query, **kwargs)
+        try:
+            completion = self._bot.ask_stream(prompt=query, **kwargs)
+        except Exception:
+            return
 
         async def text_gen():
             current = ""

@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 
 from xiaogpt.utils import validate_proxy
 
@@ -16,6 +16,7 @@ HARDWARE_COMMAND_DICT = {
     # hardware: (tts_command, wakeup_command)
     "LX06": ("5-1", "5-5"),
     "L05B": ("5-3", "5-4"),
+    "S12": ("5-1", "5-5"),  # 第一代小爱，型号MDZ-25-DA
     "S12A": ("5-1", "5-5"),
     "LX01": ("5-1", "5-5"),
     "L06A": ("5-1", "5-5"),
@@ -28,6 +29,7 @@ HARDWARE_COMMAND_DICT = {
     "L07A": ("5-1", "5-5"),  # Redmi小爱音箱Play(l7a)
     "L15A": ("7-3", "7-4"),
     "X6A": ("7-3", "7-4"),  # 小米智能家庭屏6
+    "X10A": ("7-3", "7-4"),  # 小米智能家庭屏10
     # add more here
 }
 
@@ -42,7 +44,7 @@ EDGE_TTS_DICT = {
 
 DEFAULT_COMMAND = ("5-1", "5-5")
 
-KEY_WORD = ("帮我", "请回答")
+KEY_WORD = ("帮我", "请")
 CHANGE_PROMPT_KEY_WORD = ("更改提示词",)
 PROMPT = "以下请用100字以内回答，请只回答文字不要带链接"
 # simulate_xiaoai_question
@@ -59,13 +61,16 @@ class Config:
     account: str = os.getenv("MI_USER", "")
     password: str = os.getenv("MI_PASS", "")
     openai_key: str = os.getenv("OPENAI_API_KEY", "")
+    glm_key: str = os.getenv("CHATGLM_KEY", "")
+    bard_token: str = os.getenv("BARD_TOKEN", "")
+    serpapi_api_key: str = os.getenv("SERPAPI_API_KEY", "")
     proxy: str | None = None
     mi_did: str = os.getenv("MI_DID", "")
     keyword: Iterable[str] = KEY_WORD
     change_prompt_keyword: Iterable[str] = CHANGE_PROMPT_KEY_WORD
     prompt: str = PROMPT
     mute_xiaoai: bool = False
-    bot: str = "chatgpt"
+    bot: str = "chatgptapi"
     cookie: str = ""
     api_base: str | None = None
     deployment_id: str | None = None
@@ -74,9 +79,8 @@ class Config:
     start_conversation: str = "开始持续对话"
     end_conversation: str = "结束持续对话"
     stream: bool = False
-    enable_edge_tts: bool = False
-    localhost: bool = True
-    edge_tts_voice: str = "zh-CN-XiaoxiaoNeural"
+    tts: Literal["mi", "edge"] = "mi"
+    tts_voice: str | None = None
     gpt_options: dict[str, Any] = field(default_factory=dict)
     bing_cookie_path: str = ""
     bing_cookies: dict | None = None
@@ -90,8 +94,6 @@ class Config:
                     "New bing bot needs bing_cookie_path or bing_cookies, read this: "
                     "https://github.com/acheong08/EdgeGPT#getting-authentication-required"
                 )
-        elif not self.openai_key:
-            raise Exception("Using GPT api needs openai API key, please google how to")
         if (
             self.api_base
             and self.api_base.endswith(("openai.azure.com", "openai.azure.com/"))
@@ -101,6 +103,11 @@ class Config:
                 "Using Azure OpenAI needs deployment_id, read this: "
                 "https://learn.microsoft.com/en-us/azure/cognitive-services/openai/how-to/chatgpt?pivots=programming-language-chat-completions"
             )
+        if self.bot in ["chatgptapi", "gpt3"]:
+            if not self.openai_key:
+                raise Exception(
+                    "Using GPT api needs openai API key, please google how to"
+                )
 
     @property
     def tts_command(self) -> str:
@@ -126,16 +133,26 @@ class Config:
         with open(config_path, "rb") as f:
             config = json.load(f)
             for key, value in config.items():
-                if value is not None and key in cls.__dataclass_fields__:
-                    if key == "keyword":
-                        if not isinstance(value, list):
-                            value = [value]
-                        value = [kw for kw in value if kw]
-                    elif key == "use_chatgpt_api":
-                        key, value = "bot", "chatgptapi"
-                    elif key == "use_gpt3":
-                        key, value = "bot", "gpt3"
-                    elif key == "use_newbing":
-                        key, value = "bot", "newbing"
+                if value is None:
+                    continue
+                if key == "keyword":
+                    if not isinstance(value, list):
+                        value = [value]
+                    value = [kw for kw in value if kw]
+                elif key == "use_chatgpt_api":
+                    key, value = "bot", "chatgptapi"
+                elif key == "use_gpt3":
+                    key, value = "bot", "gpt3"
+                elif key == "use_newbing":
+                    key, value = "bot", "newbing"
+                elif key == "use_glm":
+                    key, value = "bot", "glm"
+                elif key == "use_bard":
+                    key, value = "bot", "bard"
+                elif key == "use_langchain":
+                    key, value = "bot", "langchain"
+                elif key == "enable_edge_tts":
+                    key, value = "tts", "edge"
+                if key in cls.__dataclass_fields__:
                     result[key] = value
         return result
